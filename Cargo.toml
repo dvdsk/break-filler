@@ -1,0 +1,15 @@
+[package]
+name = "break-filler"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+iced = "0.13.1"
+break-enforcer = { path = "/home/david/Documents/break-enforcer" }
+clap = "4.5.27"
+jiff = { version = "0.1.28", features = ["serde"] }
+service-install = { git = "http://www.github.com/dvdsk/service-install" }
+color-eyre = "0.6.3"
+itertools = "0.14.0"
+dbstruct = "0.5.0"
+
