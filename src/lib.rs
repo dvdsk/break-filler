@@ -135,6 +135,8 @@ impl Planner {
             return Ok(res);
         }
 
+        let is_first_break = self.store.breaks().get()? == 0;
+
         for Activity {
             description,
             count: target_count,
@@ -147,26 +149,40 @@ impl Planner {
 
             // plan using `max(last reminder, program start, window_start)`
             // as reference
-            let reference = dbg!(self.last_reminder(description)?)
-                .unwrap_or(dbg!(self.program_start.clone()))
-                .max(dbg!(self.window_start()));
+            let reference = self
+                .last_reminder(description)?
+                .unwrap_or(self.program_start.clone())
+                .max(self.window_start());
 
-            let leftover_window = self.window_remaining(&reference).mul_f32(self.load);
-            let leftover_breaks = leftover_window.div_duration_f32(self.period()).floor() as usize;
-            dbg!(leftover_breaks, leftover_window);
+            let expected_window = self.window_remaining(&reference).mul_f32(self.load);
+            let expected_breaks = expected_window.div_duration_f32(self.period()).floor() as usize;
+            if dbg!(is_first_break) && dbg!(expected_breaks / 2) > dbg!(*target_count) {
+                continue;
+            }
 
-            let break_spacing = (leftover_breaks - 1) / leftover_reminders;
-            let next_reminder_count = self.count_for(description)? + 1;
-            let next_reminder_at = next_reminder_count * break_spacing;
+            dbg!(expected_breaks, expected_window);
+
+            let break_spacing = (expected_breaks - 1) as f32 / leftover_reminders as f32;
+            let next_reminder_count = self.count_for(description)?;
+            let next_reminder_at = next_reminder_count as f32 * break_spacing;
+            // let next_reminder_at = leftover_breaks - next_reminder_at;
             dbg!(next_reminder_at, next_reminder_count, break_spacing);
 
-            if next_reminder_at <= dbg!(self.current_break_number(reference)) {
+            if next_reminder_at.floor() as usize <= dbg!(self.current_break_number(reference)) {
                 res.push(description.to_owned());
                 self.mark_as_issued(description)?;
             }
         }
 
+        self.increment_breaks()?;
+
         Ok(res)
+    }
+
+    fn increment_breaks(&self) -> color_eyre::Result<()> {
+        let curr = self.store.breaks().get()?;
+        self.store.breaks().set(&(curr + 1))?;
+        Ok(())
     }
 
     fn mark_as_issued(&self, description: &String) -> Result<(), color_eyre::eyre::Error> {
