@@ -6,9 +6,15 @@ use iced::widget;
 use iced::{window, Element, Subscription, Task};
 
 use crate::cli::RunArgs;
-use crate::{time, App, Message, Store};
+use crate::{time, Message, Planner, Store};
 
-impl App {
+pub struct Ui {
+    planner: Planner,
+    active_window: Option<window::Id>,
+    active_reminders: Vec<String>,
+}
+
+impl Ui {
     pub fn new(
         RunArgs {
             activity,
@@ -17,16 +23,17 @@ impl App {
         store: Store,
     ) -> (Self, Task<Message>) {
         (
-            App {
-                store,
+            Ui {
                 active_window: None,
-                activities: activity,
-                window: deadline,
-                load: 0.5,
-                break_duration: None,
-                work_duration: None,
-                program_start: time::zoned_now(),
                 active_reminders: Vec::new(),
+                planner: Planner {
+                    store,
+                    activities: activity,
+                    window: deadline,
+                    load: 0.5,
+                    period: None,
+                    program_start: time::zoned_now(),
+                },
             },
             Task::none(),
         )
@@ -42,12 +49,11 @@ impl App {
                 break_duration,
                 work_duration,
             } => {
-                self.break_duration = Some(break_duration);
-                self.work_duration = Some(work_duration);
+                self.planner.period = Some(break_duration + work_duration);
                 Task::none()
             }
             Message::BreakStarted => {
-                self.active_reminders = self.reminder().unwrap();
+                self.active_reminders = self.planner.reminder().unwrap();
 
                 if self.active_reminders.is_empty() {
                     Task::none()
@@ -55,7 +61,6 @@ impl App {
                     eprintln!("got break start, opening window");
                     let (id, task) = window::open(window::Settings::default());
                     self.active_window = Some(id);
-                    self.update_reminder_count().unwrap();
                     task.discard()
                 }
             }
@@ -72,13 +77,13 @@ impl App {
         widget::column(
             self.active_reminders
                 .iter()
-                .map(|text| widget::text(text))
+                .map(widget::text)
                 .map(Element::from),
         )
         .into()
     }
 
-    pub fn subscription(_: &App) -> Subscription<Message> {
+    pub fn subscription(_: &Ui) -> Subscription<Message> {
         // never not call this, if you do the stream with break-enforcer
         // is ended and it can not be restart (program will crash attempting that)
         Subscription::run(take_global_stream)

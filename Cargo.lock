@@ -494,6 +494,7 @@ dependencies = [
  "itertools",
  "jiff",
  "service-install 0.5.5 (git+http://www.github.com/dvdsk/service-install)",
+ "tempfile",
 ]
 
 [[package]]

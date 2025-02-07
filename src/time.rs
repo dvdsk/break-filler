@@ -2,6 +2,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 
+use jiff::civil::Time;
+
 struct TestState {
     current: jiff::Zoned,
     break_duration: Duration,
@@ -11,19 +13,23 @@ struct TestState {
 static TEST_STATE: Mutex<Option<TestState>> = Mutex::new(None);
 static TESTING: AtomicBool = AtomicBool::new(false);
 
-pub(crate) fn setup_mock_with(args: &crate::cli::TestArgs) {
+pub fn setup_mock_from_args(args: &crate::cli::TestArgs) {
+    setup_mock_with(args.program_start, args.break_duration, args.work_duration);
+}
+
+pub fn setup_mock_with(program_start: Time, break_duration: Duration, work_duration: Duration) {
     let now = jiff::Zoned::now();
-    let program_start = now.with().time(args.program_start).build().unwrap();
+    let program_start = now.with().time(program_start).build().unwrap();
 
     *TEST_STATE.try_lock().expect("should not yet be in use") = Some(TestState {
         current: program_start,
-        break_duration: args.break_duration,
-        work_duration: args.work_duration,
+        break_duration,
+        work_duration,
     });
     TESTING.store(true, Ordering::Relaxed);
 }
 
-pub(crate) fn zoned_now() -> jiff::Zoned {
+pub fn zoned_now() -> jiff::Zoned {
     if TESTING.load(Ordering::Relaxed) {
         TEST_STATE
             .lock()
@@ -37,7 +43,7 @@ pub(crate) fn zoned_now() -> jiff::Zoned {
     }
 }
 
-pub(crate) fn next_break() {
+pub fn next_break() {
     let mut state = TEST_STATE.lock().expect("nothing should panic");
     let state = state
         .as_mut()
@@ -45,7 +51,7 @@ pub(crate) fn next_break() {
     state.current += state.work_duration
 }
 
-pub(crate) fn break_ends() {
+pub fn break_ends() {
     let mut state = TEST_STATE.lock().expect("nothing should panic");
     let state = state
         .as_mut()

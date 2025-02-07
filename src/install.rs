@@ -4,12 +4,10 @@ use color_eyre::eyre::Context;
 use itertools::Itertools;
 
 use crate::cli::RunArgs;
-use crate::Activity;
+use break_filler::Activity;
 
-impl Activity {
-    fn into_argument(self) -> String {
-        self.description + ":" + &self.count.to_string()
-    }
+fn into_argument(activity: Activity) -> String {
+    activity.description + ":" + &activity.count.to_string()
 }
 
 fn time_argument(window: Range<jiff::civil::Time>) -> String {
@@ -28,7 +26,7 @@ pub fn add_or_modify(args: RunArgs) -> color_eyre::Result<()> {
         .on_boot()
         .description("Shows reminders during break-enforcer breaks")
         .args(Itertools::intersperse(
-            args.activity.into_iter().map(Activity::into_argument),
+            args.activity.into_iter().map(into_argument),
             "--activity".to_string(),
         ))
         .arg("--deadline")

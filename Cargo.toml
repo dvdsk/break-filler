@@ -13,3 +13,6 @@ color-eyre = "0.6.3"
 itertools = "0.14.0"
 dbstruct = "0.5.0"
 
+[dev-dependencies]
+tempfile = "3.16.0"
+
