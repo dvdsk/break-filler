@@ -37,6 +37,7 @@ pub struct Planner {
     pub activities: Vec<Activity>,
     pub window: Range<jiff::civil::Time>,
     pub period: Option<Duration>,
+    pub break_duration: Option<Duration>,
     pub program_start: jiff::Zoned,
 }
 
@@ -146,43 +147,63 @@ impl Planner {
             if leftover_reminders < 1 {
                 continue;
             }
+            dbg!(leftover_reminders);
 
             // plan using `max(last reminder, program start, window_start)`
             // as reference
             let reference = self
                 .last_reminder(description)?
+                .zip(self.break_duration)
+                // checked_add can fail if the time does not exist
+                // (winter to summer time for example)
+                .and_then(|(last, break_duration)| last.checked_add(break_duration).ok())
                 .unwrap_or(self.program_start.clone())
                 .max(self.window_start());
 
-            let expected_window = self.window_remaining(&reference).mul_f32(self.load);
-            let expected_breaks = expected_window.div_duration_f32(self.period()).floor() as usize;
-            if dbg!(is_first_break) && dbg!(expected_breaks / 2) > dbg!(*target_count) {
+            let relative_window = dbg!(self.window_remaining(&reference).mul_f32(self.load));
+            let relative_breaks =
+                dbg!(relative_window.div_duration_f32(self.period())).floor() as usize;
+            if dbg!(is_first_break) && dbg!(relative_breaks / 2) > dbg!(*target_count) {
+                dbg!("EXIT FIRST BREAK");
                 continue;
             }
 
-            dbg!(expected_breaks, expected_window);
+            dbg!(relative_breaks, relative_window);
 
-            let break_spacing = (expected_breaks - 1) as f32 / leftover_reminders as f32;
-            let next_reminder_count = self.count_for(description)?;
-            let next_reminder_at = next_reminder_count as f32 * break_spacing;
+            let break_spacing = (relative_breaks) as f32 / (leftover_reminders + 1) as f32;
+            let next_reminder_at = break_spacing;
             // let next_reminder_at = leftover_breaks - next_reminder_at;
-            dbg!(next_reminder_at, next_reminder_count, break_spacing);
+            dbg!(next_reminder_at, break_spacing);
 
-            if next_reminder_at.floor() as usize <= dbg!(self.current_break_number(reference)) {
+            let breaks_after_this = relative_breaks - self.break_number_relative_to(&reference);
+            if dbg!(breaks_after_this) == 2 && leftover_reminders == 1 {
+                continue;
+            }
+
+            if next_reminder_at.floor() as usize <= dbg!(self.break_number_relative_to(&reference)) {
                 res.push(description.to_owned());
                 self.mark_as_issued(description)?;
             }
         }
 
-        self.increment_breaks()?;
+        self.increment_total_breaks()?;
 
         Ok(res)
     }
 
-    fn increment_breaks(&self) -> color_eyre::Result<()> {
+    fn increment_total_breaks(&self) -> color_eyre::Result<()> {
         let curr = self.store.breaks().get()?;
         self.store.breaks().set(&(curr + 1))?;
         Ok(())
+    }
+
+    fn break_number_relative_to(&self, reference: &jiff::Zoned) -> usize {
+        let breaks_elapsed = reference
+            .duration_until(dbg!(&time::zoned_now()))
+            .unsigned_abs()
+            .div_duration_f32(self.period())
+            .floor() as usize;
+        breaks_elapsed + 1
     }
 
     fn mark_as_issued(&self, description: &String) -> Result<(), color_eyre::eyre::Error> {
@@ -252,17 +273,9 @@ impl Planner {
     }
 
     fn window_remaining(&self, reference: &jiff::Zoned) -> Duration {
-        reference
+        dbg!(reference)
             .duration_until(&dbg!(self.window_end()))
             .unsigned_abs()
-    }
-
-    fn current_break_number(&self, reference: jiff::Zoned) -> usize {
-        reference
-            .duration_until(&time::zoned_now())
-            .unsigned_abs()
-            .div_duration_f32(self.period())
-            .floor() as usize
     }
 }
 

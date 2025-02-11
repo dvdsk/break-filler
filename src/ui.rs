@@ -33,6 +33,7 @@ impl Ui {
                     load: 0.5,
                     period: None,
                     program_start: time::zoned_now(),
+                    break_duration: None,
                 },
             },
             Task::none(),
