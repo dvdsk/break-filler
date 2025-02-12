@@ -24,11 +24,20 @@ pub enum Command {
 
 #[derive(Args, Clone)]
 pub struct RunArgs {
-    /// Activity to remind and frequency (multiple supported)
-    /// Example: drink:3.
-    /// Reminders that contain spaces should be surround with single
+    /// Activity to remind and frequency (multiple supported). Leaving
+    /// out frequency means the activity is issued every break.
+    ///
+    /// Example: drink:3
+    ///
+    /// Activities that contain spaces should be surround with single
     /// quotes (') to make sure the shell sees them as one argument.
+    ///
     /// Example: 'drink some water:2'
+    ///
+    /// If the activity needs to be rescheduled is its not marked as complete
+    /// by the user prepend an exclamation mark (!).
+    ///
+    /// Example: '!eat:1'
     #[arg(short, long, value_parser = reminder_parser)]
     pub activity: Vec<Activity>,
 
@@ -36,6 +45,18 @@ pub struct RunArgs {
     /// be issued:
     #[arg(short, long, value_parser = window_parser, default_value = "00:00..23:59")]
     pub window: Range<jiff::civil::Time>,
+
+    /// The percentage the user will be behind the computer during the window
+    /// as a number between 0 and 1.0
+    #[arg(short, long, default_value = "1.0")]
+    pub load: f32,
+
+    /// If there is a visible window with this title then do not open a
+    /// reminder unless this is the last possibility to issue the reminder
+    ///
+    /// note multiple are allowed
+    #[arg(short, long)]
+    pub apps_blocking_activity: Vec<String>,
 }
 
 #[derive(Args, Clone)]
@@ -55,8 +76,13 @@ pub struct TestArgs {
 }
 
 fn reminder_parser(s: &str) -> Result<Activity, String> {
+    let needs_confirm = s.chars().next().is_some_and(|c| c == '!');
+    let s = s.trim_start_matches('!');
+
     if s.chars().filter(|c| *c == ':').count() > 1 {
-        return Err("Activity argument may only contain one colon (:)".to_owned());
+        return Err(
+            "Activity argument may only contain one colon (:)".to_owned()
+        );
     }
 
     if let Some((description, count)) = s.split_once(':') {
@@ -65,11 +91,13 @@ fn reminder_parser(s: &str) -> Result<Activity, String> {
             count: count
                 .parse()
                 .map_err(|e| format!("Could not parse count as number: {e}"))?,
+            needs_confirm,
         })
     } else {
         Ok(Activity {
             description: s.to_owned(),
-            count: 1,
+            count: usize::MAX,
+            needs_confirm,
         })
     }
 }
@@ -85,12 +113,13 @@ fn window_parser(s: &str) -> Result<Range<jiff::civil::Time>, String> {
     }
 
     if let Some((start, end)) = s.split_once("..") {
-        let start = jiff::civil::Time::strptime("%H:%M", start).map_err(|e| {
-            format!(
-                "Could not parse start time, should be \
+        let start =
+            jiff::civil::Time::strptime("%H:%M", start).map_err(|e| {
+                format!(
+                    "Could not parse start time, should be \
                 in format: 12:34 (hh:mm). Parse error: {e}"
-            )
-        })?;
+                )
+            })?;
         let end = jiff::civil::Time::strptime("%H:%M", end).map_err(|e| {
             format!(
                 "Could not parse end time, should be \

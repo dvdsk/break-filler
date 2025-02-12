@@ -1,40 +1,59 @@
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use iced::futures::channel::mpsc;
 use iced::futures::Stream;
-use iced::widget;
+use iced::widget::Container;
+use iced::Length::Fill;
+use iced::{widget, Alignment, Theme};
 use iced::{window, Element, Subscription, Task};
 
 use crate::cli::RunArgs;
-use crate::{time, Message, Planner, Store};
+use crate::{time, window_manager, Activity, Message, Planner, Store};
 
 pub struct Ui {
     planner: Planner,
+    error: Option<color_eyre::Report>,
+    active_theme: Theme,
     active_window: Option<window::Id>,
-    active_reminders: Vec<String>,
+    active_reminders: Vec<DisplayedActivity>,
+    apps_blocking_activity: Vec<String>,
+}
+
+struct DisplayedActivity {
+    description: String,
+    checkbox: Option<bool>,
 }
 
 impl Ui {
+    pub const FONT: &'static [u8] =
+        include_bytes!("../fonts/Poppins-Medium.ttx");
+
     pub fn new(
         RunArgs {
             activity,
             window: deadline,
+            apps_blocking_activity,
+            load,
         }: RunArgs,
         store: Store,
     ) -> (Self, Task<Message>) {
         (
             Ui {
+                active_theme: Theme::TokyoNight,
                 active_window: None,
                 active_reminders: Vec::new(),
+                apps_blocking_activity,
                 planner: Planner {
                     store,
                     activities: activity,
                     window: deadline,
-                    load: 0.5,
+                    load,
                     period: None,
                     program_start: time::zoned_now(),
                     break_duration: None,
                 },
+                error: None,
             },
             Task::none(),
         )
@@ -44,17 +63,25 @@ impl Ui {
         env!("CARGO_PKG_NAME").to_string()
     }
 
-    pub fn update(&mut self, message: Message) -> Task<Message> {
-        match dbg!(message) {
+    pub fn update_or_error(
+        &mut self,
+        message: Message,
+    ) -> color_eyre::Result<Task<Message>> {
+        Ok(match dbg!(&message) {
             Message::ParameterChange {
                 break_duration,
                 work_duration,
             } => {
-                self.planner.period = Some(break_duration + work_duration);
+                self.planner.period = Some(*break_duration + *work_duration);
                 Task::none()
             }
             Message::BreakStarted => {
-                self.active_reminders = self.planner.reminder().unwrap();
+                if self.active_window.is_some() {
+                    return Ok(Task::none());
+                }
+
+                self.update_active_reminders()?;
+                self.active_theme = self.update_theme();
 
                 if self.active_reminders.is_empty() {
                     Task::none()
@@ -66,29 +93,158 @@ impl Ui {
                 }
             }
             Message::BreakEnded => {
+                self.active_reminders = self
+                    .active_reminders
+                    .drain(..)
+                    .filter(|DisplayedActivity { checkbox, .. }| {
+                        checkbox.is_some()
+                    })
+                    .collect();
+
                 if let Some(id) = self.active_window {
-                    window::close(id)
-                } else {
-                    Task::none()
+                    if self.active_reminders.is_empty() {
+                        self.active_window = None;
+                        return Ok(window::close(id));
+                    }
                 }
+                Task::none()
+            }
+            Message::Confirmed { activity, at } => {
+                let Some(to_remove) = self
+                    .active_reminders
+                    .iter()
+                    .position(|act| &act.description == activity)
+                else {
+                    return Ok(Task::none());
+                };
+
+                self.active_reminders[to_remove].checkbox = Some(true);
+                let sleep_left =
+                    Duration::from_millis(300).saturating_sub(at.elapsed());
+                if !sleep_left.is_zero() {
+                    return Ok(Task::future(resend_later(message, sleep_left)));
+                }
+
+                self.active_reminders.swap_remove(to_remove);
+                self.planner.mark_completed(&activity)?;
+
+                if let Some(id) = self.active_window {
+                    if self.active_reminders.is_empty() {
+                        self.active_window = None;
+                        return Ok(window::close(id));
+                    }
+                }
+                Task::none()
+            }
+        })
+    }
+
+    fn update_active_reminders(
+        &mut self,
+    ) -> Result<(), color_eyre::eyre::Error> {
+        let remind_only_if_needed =
+            window_manager::visible_windows().into_iter().any(|window| {
+                self.apps_blocking_activity
+                    .iter()
+                    .any(|app| window.contains(app))
+            });
+        self.active_reminders = self
+            .planner
+            .reminder(remind_only_if_needed)?
+            .into_iter()
+            .map(
+                |Activity {
+                     description,
+                     needs_confirm,
+                     ..
+                 }| DisplayedActivity {
+                    description,
+                    checkbox: needs_confirm.then(|| false),
+                },
+            )
+            .collect();
+        Ok(())
+    }
+
+    pub fn update(&mut self, message: Message) -> Task<Message> {
+        let error_to_display = match self.update_or_error(message) {
+            Ok(task) => return task,
+            Err(e) => e,
+        };
+
+        self.error = Some(error_to_display);
+        if self.active_window.is_none() {
+            let (id, task) = window::open(window::Settings::default());
+            self.active_window = Some(id);
+            task.discard()
+        } else {
+            Task::none()
+        }
+    }
+
+    pub fn view(&self, _: window::Id) -> Element<Message> {
+        if let Some(error) = &self.error {
+            let error = format!("{:?}", error);
+            return widget::text(error).into();
+        }
+
+        let column = widget::column(self.active_reminders.iter().map(
+            |DisplayedActivity {
+                 description,
+                 checkbox: needs_confirm,
+             }| {
+                if let Some(checked) = needs_confirm {
+                    widget::checkbox(description.clone(), *checked)
+                        .text_size(80)
+                        .size(80)
+                        .on_toggle(|_| Message::Confirmed {
+                            activity: description.clone(),
+                            at: Instant::now(),
+                        })
+                        .into()
+                } else {
+                    widget::text(description)
+                        .size(80)
+                        .align_x(Alignment::Center)
+                        .into()
+                }
+            },
+        ))
+        .spacing(40)
+        .align_x(Alignment::Center)
+        .width(Fill);
+
+        Container::new(column).center(Fill).into()
+    }
+
+    fn update_theme(&mut self) -> Theme {
+        match dark_light::detect() {
+            Ok(dark_light::Mode::Dark) => Theme::TokyoNight,
+            Ok(dark_light::Mode::Light) => Theme::SolarizedLight,
+            Ok(dark_light::Mode::Unspecified) => Theme::SolarizedLight,
+            Err(e) => {
+                eprintln!(
+                    "Could not detect if system dark mode on, error: {e:?}"
+                );
+                Theme::SolarizedLight
             }
         }
     }
-    pub fn view(&self, _: window::Id) -> Element<Message> {
-        widget::column(
-            self.active_reminders
-                .iter()
-                .map(widget::text)
-                .map(Element::from),
-        )
-        .into()
+
+    pub fn theme(&self, _: window::Id) -> Theme {
+        self.active_theme.clone()
     }
 
-    pub fn subscription(_: &Ui) -> Subscription<Message> {
+    pub fn subscription(&self) -> Subscription<Message> {
         // never not call this, if you do the stream with break-enforcer
         // is ended and it can not be restart (program will crash attempting that)
         Subscription::run(take_global_stream)
     }
+}
+
+async fn resend_later(msg: Message, delay: Duration) -> Message {
+    tokio::time::sleep(delay).await;
+    msg
 }
 
 // forgive me for this sin:

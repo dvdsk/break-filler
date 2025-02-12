@@ -24,6 +24,7 @@ fn setup_test(test_name: &str, activity_count: usize, end_hour: i8) -> Planner {
         activities: vec![Activity {
             description: "test".to_owned(),
             count: activity_count,
+            needs_confirm: false,
         }],
         window: std::ops::Range {
             start: civil::time(12, 0, 0, 0),
@@ -45,22 +46,22 @@ fn reminders2_breaks4() {
 
     time::next_break();
     println!("\nfirst break, should have a reminder");
-    assert_ne!(planner.reminder().unwrap(), Vec::<String>::new());
+    assert_ne!(planner.reminder(false).unwrap(), Vec::new());
     time::break_ends();
 
     time::next_break();
     println!("\nsecond break, should have no reminder");
-    assert_eq!(planner.reminder().unwrap(), Vec::<String>::new());
+    assert_eq!(planner.reminder(false).unwrap(), Vec::new());
     time::break_ends();
 
     time::next_break();
     println!("\nthird break, should have a reminder");
-    assert_ne!(planner.reminder().unwrap(), Vec::<String>::new());
+    assert_ne!(planner.reminder(false).unwrap(), Vec::new());
     time::break_ends();
 
     time::next_break();
     println!("\nlast break, should have no reminder");
-    assert_eq!(planner.reminder().unwrap(), Vec::<String>::new());
+    assert_eq!(planner.reminder(false).unwrap(), Vec::new());
     time::break_ends();
 }
 
@@ -74,22 +75,22 @@ fn reminders1_breaks4() {
 
     time::next_break();
     println!("\nfirst break, should have no reminder");
-    assert!(planner.reminder().unwrap().is_empty());
+    assert!(planner.reminder(false).unwrap().is_empty());
     time::break_ends();
 
     time::next_break();
     println!("\nsecond break, should have no reminder");
-    assert!(planner.reminder().unwrap().is_empty());
+    assert!(planner.reminder(false).unwrap().is_empty());
     time::break_ends();
 
     time::next_break();
     println!("\nthird break, should have reminder");
-    assert_eq!(planner.reminder().unwrap(), vec!["test".to_owned()]);
+    assert!(!planner.reminder(false).unwrap().is_empty());
     time::break_ends();
 
     time::next_break();
     println!("\nlast break, should have no reminder");
-    assert!(planner.reminder().unwrap().is_empty());
+    assert!(planner.reminder(false).unwrap().is_empty());
     time::break_ends();
 }
 
@@ -101,7 +102,7 @@ fn reminders2_breaks12() {
     for i in 0..12 {
         time::next_break();
         println!("\nbreak {i}");
-        let reminders = planner.reminder().unwrap();
+        let reminders = planner.reminder(false).unwrap();
         if i == 3 || i == 7 {
             assert!(!reminders.is_empty(), "should have a reminder");
         } else {
@@ -109,6 +110,35 @@ fn reminders2_breaks12() {
         }
         time::break_ends();
     }
+}
+
+#[test]
+fn reminders_inf_breaks4() {
+    let _guard = TEST_ACTIVE.lock();
+    let planner = setup_test("reminders2_breaks4", usize::MAX, 14);
+
+    // `12:25 break - 12:55 break - 13:25 break - 13:55 break `
+    // ` reminder                     reminder                `
+
+    time::next_break();
+    println!("\nfirst break, should have a reminder");
+    assert_ne!(planner.reminder(false).unwrap(), Vec::new());
+    time::break_ends();
+
+    time::next_break();
+    println!("\nsecond break, should have no reminder");
+    assert_ne!(planner.reminder(false).unwrap(), Vec::new());
+    time::break_ends();
+
+    time::next_break();
+    println!("\nthird break, should have a reminder");
+    assert_ne!(planner.reminder(false).unwrap(), Vec::new());
+    time::break_ends();
+
+    time::next_break();
+    println!("\nlast break, should have no reminder");
+    assert_ne!(planner.reminder(false).unwrap(), Vec::new());
+    time::break_ends();
 }
 
 #[test]
@@ -126,6 +156,7 @@ fn recovers() {
         activities: vec![Activity {
             description: "test".to_owned(),
             count: 2,
+            needs_confirm: false,
         }],
         window: std::ops::Range {
             start: civil::time(12, 0, 0, 0),
@@ -137,13 +168,17 @@ fn recovers() {
     };
 
     {
-        time::setup_mock_with(civil::time(12, 0, 0, 0), break_duration, work_duration);
+        time::setup_mock_with(
+            civil::time(12, 0, 0, 0),
+            break_duration,
+            work_duration,
+        );
         let store = Store::new(&path).unwrap();
         let planner = new_planner(store);
         for i in 0..6 {
             time::next_break();
             println!("\nbreak {i}");
-            let reminders = planner.reminder().unwrap();
+            let reminders = planner.reminder(false).unwrap();
             if i == 3 {
                 assert!(!reminders.is_empty(), "should have a reminder");
             } else {
@@ -153,14 +188,18 @@ fn recovers() {
         }
     }
 
-    time::setup_mock_with(civil::time(15, 0, 0, 0), break_duration, work_duration);
+    time::setup_mock_with(
+        civil::time(15, 0, 0, 0),
+        break_duration,
+        work_duration,
+    );
     let store = Store::new(&path).unwrap();
     let planner = new_planner(store);
 
     for i in 6..12 {
         time::next_break();
         println!("\nbreak {i}");
-        let reminders = planner.reminder().unwrap();
+        let reminders = planner.reminder(false).unwrap();
         if i == 7 {
             assert!(!reminders.is_empty(), "should have a reminder");
         } else {

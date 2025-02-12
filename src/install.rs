@@ -22,19 +22,26 @@ pub fn add_or_modify(args: RunArgs) -> color_eyre::Result<()> {
     let steps = service_install::install_user!()
         .current_exe()
         .unwrap()
-        .service_name("reminder")
+        .service_name(env!("CARGO_PKG_NAME"))
         .on_boot()
         .description("Shows reminders during break-enforcer breaks")
         .args(Itertools::intersperse(
             args.activity.into_iter().map(into_argument),
             "--activity".to_string(),
         ))
-        .arg("--deadline")
+        .arg("--window")
         .arg(time_argument(args.window))
+        .arg("--load")
+        .arg(args.load.to_string())
+        .args(Itertools::intersperse(
+            args.apps_blocking_activity.into_iter(),
+            "--title".to_string(),
+        ))
         .prepare_install()
         .wrap_err("Could not prepare for install")?;
 
-    service_install::tui::install::start(steps, true).wrap_err("Could not perform install")?;
+    service_install::tui::install::start(steps, true)
+        .wrap_err("Could not perform install")?;
     Ok(())
 }
 

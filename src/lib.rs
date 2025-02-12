@@ -1,6 +1,6 @@
 use std::ops::Range;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use break_enforcer::StateUpdate;
 use cli::TestArgs;
@@ -9,9 +9,9 @@ use iced::futures::channel::mpsc;
 use jiff::civil::Time;
 
 pub mod cli;
-pub mod reminder;
 pub mod time;
 pub mod ui;
+pub mod window_manager;
 
 pub type Reminder = String;
 #[dbstruct::dbstruct(db=sled)]
@@ -41,10 +41,11 @@ pub struct Planner {
     pub program_start: jiff::Zoned,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Activity {
     pub description: String,
     pub count: usize,
+    pub needs_confirm: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -54,6 +55,10 @@ pub enum Message {
     ParameterChange {
         break_duration: Duration,
         work_duration: Duration,
+    },
+    Confirmed {
+        activity: String,
+        at: Instant,
     },
 }
 
@@ -128,7 +133,10 @@ impl Planner {
     // plan breaks from the last_reminder given. If now is larger then the
     // time a reminder should be issued according to that planning add the
     // reminder.
-    pub fn reminder(&self) -> color_eyre::Result<Vec<String>> {
+    pub fn reminder(
+        &self,
+        only_if_needed: bool,
+    ) -> color_eyre::Result<Vec<Activity>> {
         self.init_store().wrap_err("Could not init store")?;
 
         let mut res = Vec::new();
@@ -136,57 +144,77 @@ impl Planner {
             return Ok(res);
         }
 
+        let mut can_skip_all = true;
         let is_first_break = self.store.breaks().get()? == 0;
 
-        for Activity {
-            description,
-            count: target_count,
-        } in &self.activities
-        {
-            let leftover_reminders = target_count - self.count_for(description)?;
-            if leftover_reminders < 1 {
+        for activity in &self.activities {
+            let remaining_reps =
+                activity.count - self.count_for(&activity.description)?;
+            if remaining_reps < 1 {
                 continue;
             }
-            dbg!(leftover_reminders);
+            dbg!(remaining_reps);
 
             // plan using `max(last reminder, program start, window_start)`
             // as reference
             let reference = self
-                .last_reminder(description)?
+                .last_reminder(&activity.description)?
                 .zip(self.break_duration)
                 // checked_add can fail if the time does not exist
                 // (winter to summer time for example)
-                .and_then(|(last, break_duration)| last.checked_add(break_duration).ok())
+                .and_then(|(last, break_duration)| {
+                    last.checked_add(break_duration).ok()
+                })
                 .unwrap_or(self.program_start.clone())
                 .max(self.window_start());
 
-            let relative_window = dbg!(self.window_remaining(&reference).mul_f32(self.load));
-            let relative_breaks =
-                dbg!(relative_window.div_duration_f32(self.period())).floor() as usize;
-            if dbg!(is_first_break) && dbg!(relative_breaks / 2) > dbg!(*target_count) {
+            let relative_window =
+                dbg!(self.window_remaining(&reference).mul_f32(self.load));
+            let relative_future_breaks =
+                dbg!(relative_window.div_duration_f32(self.period())).floor()
+                    as usize;
+            if dbg!(is_first_break)
+                && dbg!(relative_future_breaks / 2) > dbg!(activity.count)
+            {
                 dbg!("EXIT FIRST BREAK");
                 continue;
             }
 
-            dbg!(relative_breaks, relative_window);
+            dbg!(relative_future_breaks, relative_window);
 
-            let break_spacing = (relative_breaks) as f32 / (leftover_reminders + 1) as f32;
+            let break_spacing = (relative_future_breaks) as f32
+                / (remaining_reps.saturating_add(1)) as f32;
             let next_reminder_at = break_spacing;
             // let next_reminder_at = leftover_breaks - next_reminder_at;
             dbg!(next_reminder_at, break_spacing);
 
-            let breaks_after_this = relative_breaks - self.break_number_relative_to(&reference);
-            if dbg!(breaks_after_this) == 2 && leftover_reminders == 1 {
+            let breaks_after_this = relative_future_breaks
+                .saturating_sub(self.break_number_relative_to(&reference));
+            if dbg!(breaks_after_this) == 2 && remaining_reps == 1 {
                 continue;
             }
+            if breaks_after_this <= remaining_reps {
+                can_skip_all = false;
+            }
 
-            if next_reminder_at.floor() as usize <= dbg!(self.break_number_relative_to(&reference)) {
-                res.push(description.to_owned());
-                self.mark_as_issued(description)?;
+            if next_reminder_at.floor() as usize
+                <= dbg!(self.break_number_relative_to(&reference))
+            {
+                res.push(activity.clone());
             }
         }
 
         self.increment_total_breaks()?;
+
+        if can_skip_all && only_if_needed {
+            return Ok(Vec::new());
+        }
+
+        for activity in &res {
+            if !activity.needs_confirm {
+                self.mark_completed(&activity.description)?;
+            }
+        }
 
         Ok(res)
     }
@@ -206,7 +234,10 @@ impl Planner {
         breaks_elapsed + 1
     }
 
-    fn mark_as_issued(&self, description: &String) -> Result<(), color_eyre::eyre::Error> {
+    pub fn mark_completed(
+        &self,
+        description: &String,
+    ) -> Result<(), color_eyre::eyre::Error> {
         if let Some(curr) = self
             .store
             .reminder_counts()
@@ -231,7 +262,10 @@ impl Planner {
         Ok(())
     }
 
-    fn last_reminder(&self, description: &str) -> color_eyre::Result<Option<jiff::Zoned>> {
+    fn last_reminder(
+        &self,
+        description: &str,
+    ) -> color_eyre::Result<Option<jiff::Zoned>> {
         self.store
             .reminder_last_at()
             .get(description)
@@ -244,14 +278,23 @@ impl Planner {
             now.with()
                 .time(self.window.start)
                 .build()
-                .unwrap_or_else(|_| panic!("time: {} does not exist today", self.window.start))
+                .unwrap_or_else(|_| {
+                    panic!("time: {} does not exist today", self.window.start)
+                })
         } else {
             now.with()
                 .time(self.window.start)
                 .build()
-                .unwrap_or_else(|_| panic!("time: {} does not exist today", self.window.start))
+                .unwrap_or_else(|_| {
+                    panic!("time: {} does not exist today", self.window.start)
+                })
                 .yesterday()
-                .unwrap_or_else(|_| panic!("time: {} does not exist yesterday", self.window.start))
+                .unwrap_or_else(|_| {
+                    panic!(
+                        "time: {} does not exist yesterday",
+                        self.window.start
+                    )
+                })
         }
     }
 
@@ -261,14 +304,20 @@ impl Planner {
             now.with()
                 .time(self.window.end)
                 .build()
-                .unwrap_or_else(|_| panic!("time: {} does not exist today", self.window.end))
+                .unwrap_or_else(|_| {
+                    panic!("time: {} does not exist today", self.window.end)
+                })
         } else {
             now.with()
                 .time(self.window.end)
                 .build()
-                .unwrap_or_else(|_| panic!("time: {} does not exist today", self.window.end))
+                .unwrap_or_else(|_| {
+                    panic!("time: {} does not exist today", self.window.end)
+                })
                 .tomorrow()
-                .unwrap_or_else(|_| panic!("time: {} does not exist tomorrow", self.window.end))
+                .unwrap_or_else(|_| {
+                    panic!("time: {} does not exist tomorrow", self.window.end)
+                })
         }
     }
 
@@ -279,47 +328,52 @@ impl Planner {
     }
 }
 
-pub fn start_break_inforcer_integration_thread(test_config: Option<TestArgs>) {
+pub fn spawn_mock_break_enforcer_interface(test_config: TestArgs) {
     let (mut tx, rx) = mpsc::channel(64);
     thread::spawn(move || {
-        if let Some(config) = test_config {
-            tx.try_send(Message::ParameterChange {
-                break_duration: config.break_duration,
-                work_duration: config.work_duration,
-            })
-            .unwrap();
-            thread::sleep(Duration::from_millis(250));
+        tx.try_send(Message::ParameterChange {
+            break_duration: test_config.break_duration,
+            work_duration: test_config.work_duration,
+        })
+        .unwrap();
+        thread::sleep(Duration::from_millis(250));
 
-            for i in 0..config.periods {
-                eprintln!("sending break start {i}");
-                time::next_break();
-                tx.try_send(Message::BreakStarted).unwrap();
-                thread::sleep(Duration::from_secs(1));
-                time::break_ends();
-                tx.try_send(Message::BreakEnded).unwrap();
-                thread::sleep(Duration::from_secs(1));
-            }
-        } else {
-            let mut api = break_enforcer::ReconnectingApi::new().subscribe();
-            loop {
-                match api.recv_update() {
-                    StateUpdate::ParameterChange {
+        for i in 0..test_config.periods {
+            eprintln!("sending break start {i}");
+            tx.try_send(Message::BreakStarted).unwrap();
+            thread::sleep(Duration::from_secs(1));
+            time::break_ends();
+            time::next_break();
+            tx.try_send(Message::BreakEnded).unwrap();
+            thread::sleep(Duration::from_secs(1));
+        }
+    });
+    ui::send_rx(rx);
+}
+
+pub fn spawn_break_enforcer_interface() {
+    let (mut tx, rx) = mpsc::channel(64);
+    thread::spawn(move || {
+        let mut api = break_enforcer::ReconnectingApi::new().subscribe();
+        loop {
+            match api.recv_update() {
+                StateUpdate::ParameterChange {
+                    break_duration,
+                    work_duration,
+                } => tx
+                    .try_send(Message::ParameterChange {
                         break_duration,
                         work_duration,
-                    } => tx
-                        .try_send(Message::ParameterChange {
-                            break_duration,
-                            work_duration,
-                        })
-                        .expect("cant lag so much that message can not be send"),
-                    StateUpdate::BreakStarted => {
-                        tx.try_send(Message::BreakStarted)
-                            .expect("cant lag so much that message can not be send");
-                    }
-                    StateUpdate::BreakEnded => todo!(),
-                    StateUpdate::WentIdle => todo!(),
-                    StateUpdate::Reset => todo!(),
+                    })
+                    .expect("cant lag so much that message can not be send"),
+                StateUpdate::BreakStarted => {
+                    tx.try_send(Message::BreakStarted).expect(
+                        "cant lag so much that message can not be send",
+                    );
                 }
+                StateUpdate::BreakEnded => todo!(),
+                StateUpdate::WentIdle => todo!(),
+                StateUpdate::Reset => todo!(),
             }
         }
     });
