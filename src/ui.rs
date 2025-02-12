@@ -67,7 +67,7 @@ impl Ui {
         &mut self,
         message: Message,
     ) -> color_eyre::Result<Task<Message>> {
-        Ok(match dbg!(&message) {
+        Ok(match &message {
             Message::ParameterChange {
                 break_duration,
                 work_duration,

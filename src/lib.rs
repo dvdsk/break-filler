@@ -153,7 +153,6 @@ impl Planner {
             if remaining_reps < 1 {
                 continue;
             }
-            dbg!(remaining_reps);
 
             // plan using `max(last reminder, program start, window_start)`
             // as reference
@@ -169,37 +168,29 @@ impl Planner {
                 .max(self.window_start());
 
             let relative_window =
-                dbg!(self.window_remaining(&reference).mul_f32(self.load));
-            let relative_future_breaks =
-                dbg!(relative_window.div_duration_f32(self.period())).floor()
-                    as usize;
-            if dbg!(is_first_break)
-                && dbg!(relative_future_breaks / 2) > dbg!(activity.count)
-            {
-                dbg!("EXIT FIRST BREAK");
+                self.window_remaining(&reference).mul_f32(self.load);
+            let relative_future_breaks = relative_window
+                .div_duration_f32(self.period())
+                .floor() as usize;
+            if is_first_break && relative_future_breaks / 2 > activity.count {
                 continue;
             }
-
-            dbg!(relative_future_breaks, relative_window);
 
             let break_spacing = (relative_future_breaks) as f32
                 / (remaining_reps.saturating_add(1)) as f32;
             let next_reminder_at = break_spacing;
-            // let next_reminder_at = leftover_breaks - next_reminder_at;
-            dbg!(next_reminder_at, break_spacing);
 
             let breaks_after_this = relative_future_breaks
                 .saturating_sub(self.break_number_relative_to(&reference));
-            if dbg!(breaks_after_this) == 2 && remaining_reps == 1 {
+            if breaks_after_this == 2 && remaining_reps == 1 {
                 continue;
             }
             if breaks_after_this < remaining_reps {
                 can_skip_all = false;
-                dbg!(breaks_after_this, remaining_reps, can_skip_all);
             }
 
             if next_reminder_at.floor() as usize
-                <= dbg!(self.break_number_relative_to(&reference))
+                <= self.break_number_relative_to(&reference)
             {
                 res.push(activity.clone());
             }
@@ -207,7 +198,6 @@ impl Planner {
 
         self.increment_total_breaks()?;
 
-        dbg!(can_skip_all, should_skip_if_reasonable);
         if can_skip_all && should_skip_if_reasonable {
             return Ok(Vec::new());
         }
@@ -229,7 +219,7 @@ impl Planner {
 
     fn break_number_relative_to(&self, reference: &jiff::Zoned) -> usize {
         let breaks_elapsed = reference
-            .duration_until(dbg!(&time::zoned_now()))
+            .duration_until(&time::zoned_now())
             .unsigned_abs()
             .div_duration_f32(self.period())
             .floor() as usize;
@@ -324,8 +314,8 @@ impl Planner {
     }
 
     fn window_remaining(&self, reference: &jiff::Zoned) -> Duration {
-        dbg!(reference)
-            .duration_until(&dbg!(self.window_end()))
+        reference
+            .duration_until(&self.window_end())
             .unsigned_abs()
     }
 }
