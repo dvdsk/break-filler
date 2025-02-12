@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 iced = { version = "0.13.1", features = ["tokio"] }
 dark-light = "2.0.0"
-break-enforcer = { path = "/home/david/Documents/break-enforcer" }
+break-enforcer = { git = "http://www.github.com/evavh/break-enforcer" }
 clap = "4.5.27"
 jiff = { version = "0.1.28", features = ["serde"] }
 service-install = { git = "http://www.github.com/dvdsk/service-install" }

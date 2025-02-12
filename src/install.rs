@@ -1,7 +1,6 @@
 use std::ops::Range;
 
 use color_eyre::eyre::Context;
-use itertools::Itertools;
 
 use crate::cli::RunArgs;
 use break_filler::Activity;
@@ -25,18 +24,23 @@ pub fn add_or_modify(args: RunArgs) -> color_eyre::Result<()> {
         .service_name(env!("CARGO_PKG_NAME"))
         .on_boot()
         .description("Shows reminders during break-enforcer breaks")
-        .args(Itertools::intersperse(
-            args.activity.into_iter().map(into_argument),
-            "--activity".to_string(),
-        ))
+        .arg("run")
+        .args(
+            args.activity
+                .into_iter()
+                .map(into_argument)
+                .flat_map(|a| ["--activity".to_string(), a]),
+        )
         .arg("--window")
         .arg(time_argument(args.window))
         .arg("--load")
         .arg(args.load.to_string())
-        .args(Itertools::intersperse(
-            args.skip_when_visible.into_iter(),
-            "--title".to_string(),
-        ))
+        .args(
+            args.skip_when_visible
+                .into_iter()
+                .flat_map(|a| ["--skip-when-visible".to_string(), a]),
+        )
+        .overwrite_existing(true)
         .prepare_install()
         .wrap_err("Could not prepare for install")?;
 

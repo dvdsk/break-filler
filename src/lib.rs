@@ -314,9 +314,7 @@ impl Planner {
     }
 
     fn window_remaining(&self, reference: &jiff::Zoned) -> Duration {
-        reference
-            .duration_until(&self.window_end())
-            .unsigned_abs()
+        reference.duration_until(&self.window_end()).unsigned_abs()
     }
 }
 
@@ -363,9 +361,14 @@ pub fn spawn_break_enforcer_interface() {
                         "cant lag so much that message can not be send",
                     );
                 }
-                StateUpdate::BreakEnded => todo!(),
-                StateUpdate::WentIdle => todo!(),
-                StateUpdate::Reset => todo!(),
+                StateUpdate::BreakEnded => {
+                    tx.try_send(Message::BreakEnded).expect(
+                        "cant lag so much that message can not be send",
+                    );
+                }
+                StateUpdate::WentIdle
+                | StateUpdate::Reset
+                | StateUpdate::LongReset => (),
             }
         }
     });
