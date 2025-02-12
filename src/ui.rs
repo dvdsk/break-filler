@@ -126,7 +126,7 @@ impl Ui {
                 }
 
                 self.active_reminders.swap_remove(to_remove);
-                self.planner.mark_completed(&activity)?;
+                self.planner.mark_completed(activity)?;
 
                 if let Some(id) = self.active_window {
                     if self.active_reminders.is_empty() {
@@ -142,8 +142,9 @@ impl Ui {
     fn update_active_reminders(
         &mut self,
     ) -> Result<(), color_eyre::eyre::Error> {
-        let should_skip_if_reasonable =
-            window_manager::visible_windows().into_iter().any(|window| {
+        let should_skip_if_reasonable = window_manager::visible_windows()?
+            .into_iter()
+            .any(|window| {
                 self.skip_when_visible.iter().any(|app| {
                     window.to_lowercase().contains(&app.to_lowercase())
                 })
@@ -159,7 +160,7 @@ impl Ui {
                      ..
                  }| DisplayedActivity {
                     description,
-                    checkbox: needs_confirm.then(|| false),
+                    checkbox: needs_confirm.then_some(false),
                 },
             )
             .collect();

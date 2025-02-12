@@ -1,10 +1,18 @@
+use color_eyre::eyre::Context;
+use color_eyre::Section;
 use swayipc::Connection;
 
-pub fn visible_windows() -> Vec<String> {
-    let mut conn = Connection::new().unwrap();
+pub fn visible_windows() -> color_eyre::Result<Vec<String>> {
+    let mut conn = Connection::new()
+        .wrap_err("Could not connect to sway")
+        .note(
+        "The skip-when-visible option only works with the Sway window manager",
+    )?;
     let mut res = Vec::new();
 
-    let root = conn.get_tree().unwrap();
+    let root = conn
+        .get_tree()
+        .wrap_err("Error getting window tree from Sway")?;
     let mut nodes = root.nodes;
     while !nodes.is_empty() {
         if let Some(node) = nodes.pop() {
@@ -17,5 +25,5 @@ pub fn visible_windows() -> Vec<String> {
         }
     }
 
-    res
+    Ok(res)
 }
