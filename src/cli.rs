@@ -54,9 +54,9 @@ pub struct RunArgs {
     /// If there is a visible window with this title then do not open a
     /// reminder unless this is the last possibility to issue the reminder
     ///
-    /// note multiple are allowed
+    /// Note: multiple are allowed, case-insensitive
     #[arg(short, long)]
-    pub apps_blocking_activity: Vec<String>,
+    pub skip_when_visible: Vec<String>,
 }
 
 #[derive(Args, Clone)]

@@ -17,7 +17,7 @@ pub struct Ui {
     active_theme: Theme,
     active_window: Option<window::Id>,
     active_reminders: Vec<DisplayedActivity>,
-    apps_blocking_activity: Vec<String>,
+    skip_when_visible: Vec<String>,
 }
 
 struct DisplayedActivity {
@@ -33,7 +33,7 @@ impl Ui {
         RunArgs {
             activity,
             window: deadline,
-            apps_blocking_activity,
+            skip_when_visible: apps_blocking_activity,
             load,
         }: RunArgs,
         store: Store,
@@ -43,7 +43,7 @@ impl Ui {
                 active_theme: Theme::TokyoNight,
                 active_window: None,
                 active_reminders: Vec::new(),
-                apps_blocking_activity,
+                skip_when_visible: apps_blocking_activity,
                 planner: Planner {
                     store,
                     activities: activity,
@@ -142,15 +142,15 @@ impl Ui {
     fn update_active_reminders(
         &mut self,
     ) -> Result<(), color_eyre::eyre::Error> {
-        let remind_only_if_needed =
+        let should_skip_if_reasonable =
             window_manager::visible_windows().into_iter().any(|window| {
-                self.apps_blocking_activity
-                    .iter()
-                    .any(|app| window.contains(app))
+                self.skip_when_visible.iter().any(|app| {
+                    window.to_lowercase().contains(&app.to_lowercase())
+                })
             });
         self.active_reminders = self
             .planner
-            .reminder(remind_only_if_needed)?
+            .reminder(should_skip_if_reasonable)?
             .into_iter()
             .map(
                 |Activity {

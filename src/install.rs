@@ -34,7 +34,7 @@ pub fn add_or_modify(args: RunArgs) -> color_eyre::Result<()> {
         .arg("--load")
         .arg(args.load.to_string())
         .args(Itertools::intersperse(
-            args.apps_blocking_activity.into_iter(),
+            args.skip_when_visible.into_iter(),
             "--title".to_string(),
         ))
         .prepare_install()

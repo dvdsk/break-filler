@@ -135,7 +135,7 @@ impl Planner {
     // reminder.
     pub fn reminder(
         &self,
-        only_if_needed: bool,
+        should_skip_if_reasonable: bool,
     ) -> color_eyre::Result<Vec<Activity>> {
         self.init_store().wrap_err("Could not init store")?;
 
@@ -193,8 +193,9 @@ impl Planner {
             if dbg!(breaks_after_this) == 2 && remaining_reps == 1 {
                 continue;
             }
-            if breaks_after_this <= remaining_reps {
+            if breaks_after_this < remaining_reps {
                 can_skip_all = false;
+                dbg!(breaks_after_this, remaining_reps, can_skip_all);
             }
 
             if next_reminder_at.floor() as usize
@@ -206,7 +207,8 @@ impl Planner {
 
         self.increment_total_breaks()?;
 
-        if can_skip_all && only_if_needed {
+        dbg!(can_skip_all, should_skip_if_reasonable);
+        if can_skip_all && should_skip_if_reasonable {
             return Ok(Vec::new());
         }
 
