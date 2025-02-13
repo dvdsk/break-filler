@@ -9,7 +9,7 @@ dark-light = "2.0.0"
 break-enforcer = { git = "http://www.github.com/evavh/break-enforcer" }
 clap = "4.5.27"
 jiff = { version = "0.1.28", features = ["serde"] }
-service-install = { git = "http://www.github.com/dvdsk/service-install" }
+service-install = "0.5.6"
 color-eyre = "0.6.3"
 itertools = "0.14.0"
 dbstruct = "0.5.0"

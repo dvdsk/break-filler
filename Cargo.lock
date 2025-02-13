@@ -556,7 +556,7 @@ dependencies = [
  "itertools",
  "ron",
  "serde",
- "service-install 0.5.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "service-install",
  "sudo",
  "thiserror 2.0.11",
  "tokio",
@@ -576,7 +576,7 @@ dependencies = [
  "iced",
  "itertools",
  "jiff",
- "service-install 0.5.5 (git+http://www.github.com/dvdsk/service-install)",
+ "service-install",
  "swayipc",
  "tempfile",
  "tokio",
@@ -3593,27 +3593,9 @@ dependencies = [
 
 [[package]]
 name = "service-install"
-version = "0.5.5"
+version = "0.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33ec0da96c8346b319d6bf8c1edecfaa465a23b7433d3b6f51556ce97b6030fc"
-dependencies = [
- "dialoguer",
- "home",
- "itertools",
- "shell-escape",
- "sudo",
- "sysinfo",
- "tempfile",
- "thiserror 2.0.11",
- "time",
- "tracing",
- "uzers",
-]
-
-[[package]]
-name = "service-install"
-version = "0.5.5"
-source = "git+http://www.github.com/dvdsk/service-install#0a558c838b76fa1c0c449c7f84e08ee7d16ee1f9"
+checksum = "886c6653629cb1f8aaca35d41d332b4cf484306b77ae626675df909eaaced6fa"
 dependencies = [
  "dialoguer",
  "home",
