@@ -1,6 +1,7 @@
 use std::ops::Range;
 
 use color_eyre::eyre::Context;
+use color_eyre::Section;
 
 use crate::cli::RunArgs;
 use break_filler::Activity;
@@ -18,12 +19,17 @@ fn time_argument(window: Range<jiff::civil::Time>) -> String {
 }
 
 pub fn add_or_modify(args: RunArgs) -> color_eyre::Result<()> {
+    let display_env_value = std::env::var("WAYLAND_DISPLAY")
+        .wrap_err("Could not get current display.")
+        .note("Only wayland is supported by the installer")?;
+
     let steps = service_install::install_user!()
         .current_exe()
         .unwrap()
         .service_name(env!("CARGO_PKG_NAME"))
         .on_boot()
         .description("Shows reminders during break-enforcer breaks")
+        .env_var("WAYLAND_DISPLAY", display_env_value)
         .arg("run")
         .args(
             args.activity
