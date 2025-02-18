@@ -1,4 +1,5 @@
-use std::{env, fs};
+use std::time::Duration;
+use std::{env, fs, thread};
 
 use break_filler::ui::Ui;
 use clap::Parser;
@@ -18,6 +19,10 @@ fn main() -> color_eyre::Result<()> {
 
     let (run_args, store) = match cli.command {
         cli::Command::Run(run_args) => {
+            // give login process time to complete such that the display
+            // server is running when iced starts. (there is no simple way to
+            // check that which is why we use a sleep)
+            thread::sleep(Duration::from_secs(10));
             spawn_break_enforcer_interface();
             #[expect(
                 deprecated,
