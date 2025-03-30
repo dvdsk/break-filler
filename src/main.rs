@@ -16,6 +16,7 @@ mod install;
 
 fn main() -> color_eyre::Result<()> {
     let cli = Cli::parse();
+    color_eyre::install().unwrap();
 
     let (run_args, store) = match cli.command {
         cli::Command::Run(run_args) => {

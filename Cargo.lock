@@ -2373,9 +2373,9 @@ checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 
 [[package]]
 name = "libc"
-version = "0.2.169"
+version = "0.2.171"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b5aba8db14291edd000dfcc4d620c7ebfb122c613afb886ca8803fa4e128a20a"
+checksum = "c19937216e9d3aa9956d9bb8dfc0b0c8beb6058fc4f7a4dc4d850edf86a237d6"
 
 [[package]]
 name = "libloading"
@@ -2770,6 +2770,15 @@ dependencies = [
  "block2",
  "objc2",
  "objc2-foundation",
+]
+
+[[package]]
+name = "objc2-core-foundation"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "daeaf60f25471d26948a1c2f840e3f7d86f4109e3af4e8e4b5cd70c39690d925"
+dependencies = [
+ "bitflags 2.8.0",
 ]
 
 [[package]]
@@ -3602,7 +3611,7 @@ dependencies = [
  "itertools",
  "shell-escape",
  "sudo",
- "sysinfo",
+ "sysinfo 0.33.1",
  "tempfile",
  "thiserror 2.0.11",
  "time",
@@ -3869,19 +3878,19 @@ dependencies = [
 [[package]]
 name = "swayipc"
 version = "3.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b8c50cb2e98e88b52066a35ef791fffd8f6fa631c3a4983de18ba41f718c736"
+source = "git+https://www.github.com/dvdsk/swayipc-rs#808f7ede27b7a7b7ed6af201620f6e7bdfb58034"
 dependencies = [
  "serde",
  "serde_json",
  "swayipc-types",
+ "sysinfo 0.34.1",
+ "uzers",
 ]
 
 [[package]]
 name = "swayipc-types"
 version = "1.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "551233c60323e87cfb8194c21cc44577ab848d00bb7fa2d324a2c7f52609eaff"
+source = "git+https://www.github.com/dvdsk/swayipc-rs#808f7ede27b7a7b7ed6af201620f6e7bdfb58034"
 dependencies = [
  "serde",
  "serde_json",
@@ -3941,6 +3950,19 @@ dependencies = [
  "memchr",
  "ntapi",
  "rayon",
+ "windows 0.57.0",
+]
+
+[[package]]
+name = "sysinfo"
+version = "0.34.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "927fa32067cbb22b8a91987d84c0ff94c7441ccf3f767165a58d77a656d6267c"
+dependencies = [
+ "libc",
+ "memchr",
+ "ntapi",
+ "objc2-core-foundation",
  "windows 0.57.0",
 ]
 

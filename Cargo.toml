@@ -14,7 +14,7 @@ color-eyre = "0.6.3"
 itertools = "0.14.0"
 dbstruct = "0.5.0"
 tokio = { version = "1.43.0", features = ["time"] }
-swayipc = "3.0.3"
+swayipc = { git = "https://www.github.com/dvdsk/swayipc-rs" }
 
 [dev-dependencies]
 tempfile = "3.16.0"
